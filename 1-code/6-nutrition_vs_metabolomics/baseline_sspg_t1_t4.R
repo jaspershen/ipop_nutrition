@@ -113,6 +113,7 @@ matched_idx =
   dplyr::filter(!is.na(sample_id2))
 
 
+
 matched_idx
 
 cbind(nutrition_sample_info[match(matched_idx$sample_id1, nutrition_sample_info$sample_id),
@@ -212,6 +213,15 @@ sample_info_IR =
   dplyr::filter(!is.na(sspg_status)) %>%
   dplyr::filter(sspg_status == "IR")
 
+
+# cor_data =
+#   partial_cor_pattern(
+#     data_set1 = nutrition_expression_data,
+#     data_set2 = metabolomics_expression_data,
+#     sample_info = nutrition_sample_info,
+#     method = "spearman",
+#     threads = 5
+#   )
 # cor_data_IS =
 #   partial_cor_pattern(
 #     data_set1 = nutrition_expression_data[, sample_info_IS$sample_id],
@@ -229,13 +239,15 @@ sample_info_IR =
 #     method = "spearman",
 #     threads = 5
 #   )
-#
+# save(cor_data, file = "cor_data")
 # save(cor_data_IS, file = "cor_data_IS")
 # save(cor_data_IR, file = "cor_data_IR")
 
+load("cor_data")
 load("cor_data_IS")
 load("cor_data_IR")
 
+write.csv(cor_data, file = "cor_data.csv", row.names = FALSE)
 write.csv(cor_data_IS, file = "cor_data_IS.csv", row.names = FALSE)
 write.csv(cor_data_IR, file = "cor_data_IR.csv", row.names = FALSE)
 
@@ -250,6 +262,13 @@ which(cor_data_IS$p_adjust < 0.05)
 
 ####output results
 library(openxlsx)
+cor_data_output =
+  cor_data %>%
+  dplyr::filter(p_adjust < 0.05) %>%
+  dplyr::left_join(metabolomics_variable_info, by = c("data_set2" = "variable_id")) %>%
+  dplyr::select(-p_adjust2) %>%
+  dplyr::arrange(p_adjust)
+
 cor_data_IS_output =
   cor_data_IS %>%
   dplyr::filter(p_adjust < 0.05) %>%
@@ -264,6 +283,12 @@ cor_data_IR_output =
   dplyr::select(-p_adjust2) %>%
   dplyr::arrange(p_adjust)
 
+# openxlsx::write.xlsx(
+#   cor_data_output,
+#   "cor_data_output.xlsx",
+#   asTable = TRUE,
+#   overwrite = TRUE
+# )
 # openxlsx::write.xlsx(
 #   cor_data_IS_output,
 #   "cor_data_IS_output.xlsx",
@@ -357,6 +382,19 @@ unique(cor_data_IS$data_set2)
 unique(cor_data_IS$data_set1)
 
 ######all metabolites
+
+all_cor =
+cor_data  %>% 
+  dplyr::select(-c(p:p_adjust2)) %>%
+  tidyr::pivot_wider(names_from = data_set2, values_from = "cor") %>%
+  tibble::column_to_rownames(var = "data_set1")
+
+all_p =
+cor_data  %>% 
+  dplyr::select(-c(p, p_adjust2, cor)) %>%
+  tidyr::pivot_wider(names_from = data_set2, values_from = "p_adjust") %>%
+  tibble::column_to_rownames(var = "data_set1")
+
 normal_cor =
   cor_data_IS %>%
   dplyr::select(-c(p:p_adjust2)) %>%
@@ -381,6 +419,7 @@ predm_p =
   tidyr::pivot_wider(names_from = data_set2, values_from = "p_adjust") %>%
   tibble::column_to_rownames(var = "data_set1")
 
+colnames(all_cor) =
 colnames(predm_cor) =
   colnames(normal_cor) =
   metabolomics_variable_info$Metabolite[match(colnames(predm_cor), metabolomics_variable_info$variable_id)]
@@ -394,6 +433,45 @@ col_fun = circlize::colorRamp2(
 )
 
 library(wesanderson)
+
+###for all_cor
+plot =
+  Heatmap(
+    t(all_cor),
+    col = col_fun,
+    border = TRUE,
+    show_column_dend = TRUE,
+    show_row_dend = TRUE,
+    clustering_distance_rows = "euclidean",
+    clustering_method_rows = "complete",
+    clustering_distance_columns = "euclidean",
+    clustering_method_columns = "complete",
+    name = "Spearman correlation",
+    cluster_columns = TRUE,
+    cluster_rows = TRUE,
+    column_names_gp = gpar(cex = 0.5, rot = 45),
+    row_names_gp = gpar(cex = 0.3),
+    column_names_rot = 45,
+    cell_fun = function(j, i, x, y, w, h, fill) {
+      gb1 = textGrob("*")
+      gb_w1 = convertWidth(grobWidth(gb1), "mm")
+      gb_h1 = convertHeight(grobHeight(gb1), "mm")
+      gb2 = textGrob(".")
+      gb_w2 = convertWidth(grobWidth(gb2), "mm")
+      gb_h2 = convertHeight(grobHeight(gb2), "mm")
+      if (t(all_p)[i, j] < 0.05) {
+        grid.text("*", x, y - gb_h1 * 0.5 + gb_w1 * 0.4, gp = gpar(col = "red"))
+      }
+      
+      # if (t(all_p)[i, j] > 0.05 & t(all_p)[i, j] < 0.2) {
+      #   grid.points(pch = 20, x = x, y = y, size = unit(0.3, "char"), gp = gpar(col = "red"))
+      # }
+    }
+  )
+
+plot = ggplotify::as.ggplot(plot)
+plot
+ggsave(plot, filename = "all_cor_all_metabolite.pdf", width = 10, height = 10)
 
 plot =
   Heatmap(
@@ -488,10 +566,30 @@ remove_metabolite2 =
   dplyr::filter(n == 0) %>%
   dplyr::pull(data_set2)
 
+remove_metabolite3 = 
+  cor_data %>%
+  dplyr::group_by(data_set2) %>%
+  dplyr::summarise(n = sum(p_adjust < 0.05)) %>%
+  dplyr::filter(n == 0) %>%
+  dplyr::pull(data_set2)
+
+
 remove_metabolite =
-  intersect(remove_metabolite1, remove_metabolite2)
+  intersect(intersect(remove_metabolite1, remove_metabolite2), remove_metabolite3)
 
 length(remove_metabolite)
+
+all_cor =
+  cor_data  %>% 
+  dplyr::select(-c(p:p_adjust2)) %>%
+  tidyr::pivot_wider(names_from = data_set2, values_from = "cor") %>%
+  tibble::column_to_rownames(var = "data_set1")
+
+all_p = 
+  cor_data  %>% 
+  dplyr::select(-c(p, p_adjust2, cor)) %>%
+  tidyr::pivot_wider(names_from = data_set2, values_from = "p_adjust") %>%
+  tibble::column_to_rownames(var = "data_set1")
 
 normal_cor =
   cor_data_IS %>%
@@ -518,6 +616,14 @@ predm_p =
   tibble::column_to_rownames(var = "data_set1")
 
 ###remove the metabolites which we need to remove
+all_cor =
+  all_cor %>%
+  dplyr::select(-remove_metabolite)
+
+all_p =
+  all_p %>%
+  dplyr::select(-remove_metabolite)
+
 normal_cor =
   normal_cor %>%
   dplyr::select(-remove_metabolite)
@@ -540,6 +646,7 @@ colnames(predm_cor)
 
 library(ComplexHeatmap)
 
+colnames(all_cor) =
 colnames(predm_cor) =
   colnames(normal_cor) =
   metabolomics_variable_info$Metabolite[match(colnames(predm_cor), metabolomics_variable_info$variable_id)]
@@ -552,6 +659,52 @@ col_fun = circlize::colorRamp2(
 )
 
 library(wesanderson)
+
+plot = 
+  Heatmap(
+    t(all_cor),
+    col = col_fun,
+    border = TRUE,
+    show_column_dend = TRUE,
+    show_row_dend = TRUE,
+    clustering_distance_rows = "euclidean",
+    clustering_method_rows = "complete",
+    clustering_distance_columns = "euclidean",
+    clustering_method_columns = "complete",
+    name = "Spearman correlation",
+    cluster_columns = TRUE,
+    cluster_rows = TRUE,
+    column_names_gp = gpar(cex = 0.5, rot = 45),
+    row_names_gp = gpar(cex = 0.5),
+    column_names_rot = 45,
+    cell_fun = function(j, i, x, y, w, h, fill) {
+      gb1 = textGrob("*")
+      gb_w1 = convertWidth(grobWidth(gb1), "mm")
+      gb_h1 = convertHeight(grobHeight(gb1), "mm")
+      gb2 = textGrob(".")
+      gb_w2 = convertWidth(grobWidth(gb2), "mm")
+      gb_h2 = convertHeight(grobHeight(gb2), "mm")
+      if (t(all_p)[i, j] < 0.05) {
+        grid.text("*", x, y - gb_h1 * 0.5 + gb_w1 * 0.4, gp = gpar(col = "red"))
+      }
+      
+      if (t(all_p)[i, j] > 0.05 & t(all_p)[i, j] < 0.2) {
+        grid.points(
+          pch = 20,
+          x = x,
+          y = y,
+          size = unit(0.3, "char"),
+          gp = gpar(col = "red")
+        )
+        # grid.text(label = ".", x = x, y - gb_h2 * 0.5 + gb_w1 * 0.4)
+      }
+    }
+  )
+
+  plot = ggplotify::as.ggplot(plot)
+plot
+# ggsave(plot, filename = "all_cor.pdf", width = 10, height = 10)
+
 
 plot =
   Heatmap(
