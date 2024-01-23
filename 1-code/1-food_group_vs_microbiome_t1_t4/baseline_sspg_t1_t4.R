@@ -229,6 +229,11 @@ load("cor_data")
 load("cor_data_IS")
 load("cor_data_IR")
 
+head(cor_data_IR)
+head(cor_data_IS)
+
+plot(cor_data_IR$cor, cor_data_IS$cor)
+
 dim(cor_data)
 dim(cor_data_IS)
 dim(cor_data_IR)
@@ -321,19 +326,19 @@ cor_data_IR %>%
   dplyr::arrange(desc(abs(cor))) %>%
   head()
 
-plot(as.numeric(nutrition_expression_data["VitC", sample_info_IR$sample_id]),
-     as.numeric(microbiome_expression_data["nRPLC_441.3947_11.3", sample_info_IR$sample_id]))
+# plot(as.numeric(nutrition_expression_data["VitC", sample_info_IR$sample_id]),
+#      as.numeric(microbiome_expression_data["nRPLC_441.3947_11.3", sample_info_IR$sample_id]))
 
-abline(0, -1)
+# abline(0, -1)
 
 cor_data_IS %>%
   dplyr::arrange(desc(abs(cor))) %>%
   head()
 
-plot(as.numeric(nutrition_expression_data["VitC", sample_info_IS$sample_id]),
-     as.numeric(microbiome_expression_data["nRPLC_441.3947_11.3", sample_info_IS$sample_id]))
+# plot(as.numeric(nutrition_expression_data["VitC", sample_info_IS$sample_id]),
+#      as.numeric(microbiome_expression_data["nRPLC_441.3947_11.3", sample_info_IS$sample_id]))
 
-abline(0, -1)
+# abline(0, -1)
 
 cor(
   as.numeric(nutrition_expression_data["VitC", sample_info_IS$sample_id]),
@@ -341,19 +346,19 @@ cor(
   method = "spearman"
 )
 
-temp_sample_info =
-  sample_info_IS[, c("Sex", "Age")]
+# temp_sample_info =
+#   sample_info_IS[, c("Sex", "Age")]
 
-temp_sample_info$Sex[temp_sample_info$Sex == 'F'] = 0
-temp_sample_info$Sex[temp_sample_info$Sex == 'M'] = 1
-temp_sample_info$Sex = as.numeric(temp_sample_info$Sex)
+# temp_sample_info$Sex[temp_sample_info$Sex == 'F'] = 0
+# temp_sample_info$Sex[temp_sample_info$Sex == 'M'] = 1
+# temp_sample_info$Sex = as.numeric(temp_sample_info$Sex)
 
-ppcor::pcor.test(
-  x = as.numeric(nutrition_expression_data["VitE_a_Toco", sample_info_IS$sample_id]),
-  y = as.numeric(microbiome_expression_data["pHILIC_732.5525_5.1", sample_info_IS$sample_id]),
-  z = temp_sample_info,
-  method = "spearman"
-)
+# ppcor::pcor.test(
+#   x = as.numeric(nutrition_expression_data["VitE_a_Toco", sample_info_IS$sample_id]),
+#   y = as.numeric(microbiome_expression_data["pHILIC_732.5525_5.1", sample_info_IS$sample_id]),
+#   z = temp_sample_info,
+#   method = "spearman"
+# )
 
 unique(cor_data_IS$data_set2)
 unique(cor_data_IS$data_set1)
@@ -880,3 +885,64 @@ plot
 #        filename = "IS_cor.pdf",
 #        width = 10,
 #        height = 10)
+
+cor_data_IR
+
+
+temp_cor_is <-
+normal_cor  %>% 
+tibble::rownames_to_column(var = "food_group") %>%
+tidyr::pivot_longer(cols = -food_group, names_to = "microbiome", values_to = "cor")
+
+temp_p_is <-
+normal_p  %>% 
+tibble::rownames_to_column(var = "food_group") %>%
+tidyr::pivot_longer(cols = -food_group, names_to = "microbiome", values_to = "p")
+
+
+temp_is <-
+temp_cor_is  %>% 
+dplyr::left_join(temp_p_is, by = c("food_group", "microbiome"))
+
+
+temp_cor_ir <-
+predm_cor  %>% 
+tibble::rownames_to_column(var = "food_group") %>%
+tidyr::pivot_longer(cols = -food_group, names_to = "microbiome", values_to = "cor")
+
+temp_p_ir <-
+predm_cor  %>% 
+tibble::rownames_to_column(var = "food_group") %>%
+tidyr::pivot_longer(cols = -food_group, names_to = "microbiome", values_to = "p")
+
+temp_ir <-
+temp_cor_ir  %>% 
+dplyr::left_join(temp_p_ir, by = c("food_group", "microbiome"))
+
+dim(temp_is)
+dim(temp_ir)
+
+###use histgram to show the distribution of the cor
+library(ggplot2)
+library(ggpubr)
+temp_is  %>% 
+ggplot(aes(cor)) +
+  geom_histogram(binwidth = 0.1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+###use the density plot to show the distribution of the cor
+
+temp <-
+rbind(
+  data.frame(temp_is, class = "IS"),
+  data.frame(temp_ir, class = "IR")
+)
+
+temp %>%
+ggplot(aes(abs(cor))) +
+  geom_density(aes(color = class)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
