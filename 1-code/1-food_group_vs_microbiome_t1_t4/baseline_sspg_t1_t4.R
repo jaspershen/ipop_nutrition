@@ -940,9 +940,16 @@ rbind(
   data.frame(temp_ir, class = "IR")
 )
 
+###the density plot below use the color to fill the density plot
+plot <-
 temp %>%
-ggplot(aes(abs(cor))) +
+  ggplot(aes(cor)) +
   geom_density(aes(color = class)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  scale_color_manual(values = ir_is_color) +
+  labs(x = "Correlation", y = "Density")
 
+plot
+
+ggsave(plot, filename = "cor_density_comparison.pdf", 
+       width = 8, height = 6)

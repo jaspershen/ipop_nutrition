@@ -318,3 +318,8 @@ data_class_color <-
     "microbiome" = ggsci::pal_lancet()(n = 9)[4],
     "metabolomics" = ggsci::pal_lancet()(n = 9)[5]
   )
+
+
+ir_is_color <-
+  c("IR" = "#EE0000FF",
+    "IS" = "#008280FF")

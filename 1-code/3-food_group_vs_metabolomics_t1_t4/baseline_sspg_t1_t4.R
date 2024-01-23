@@ -735,7 +735,6 @@ col_fun = circlize::colorRamp2(
 
 library(wesanderson)
 
-
 plot =
   Heatmap(
     t(all_cor),
@@ -880,243 +879,311 @@ plot
 #        width = 10,
 #        height = 10)
 
+temp_cor_is <-
+  normal_cor  %>% 
+  tibble::rownames_to_column(var = "food_group") %>%
+  tidyr::pivot_longer(cols = -food_group, names_to = "metabolie", values_to = "cor")
 
-###pathway enrichment for metabolites for IR and IS
-library(metpath)
-####IR metabolites
-sum(cor_data_IR_output$p_adjust < 0.05)
+temp_p_is <-
+  normal_p  %>% 
+  tibble::rownames_to_column(var = "food_group") %>%
+  tidyr::pivot_longer(cols = -food_group, names_to = "metabolie", values_to = "p")
 
-idx <- which(cor_data_IR_output$p_adjust < 0.05)
-hmdb_id <- cor_data_IR_output$HMDB[idx]
-kegg_id <- cor_data_IR_output$KEGG[idx]
 
-hmdb_id <-
-  hmdb_id[hmdb_id != ""] %>%
-  stringr::str_split("\\|") %>%
-  unlist() %>%
-  unique()
+temp_is <-
+  temp_cor_is  %>% 
+  dplyr::left_join(temp_p_is, by = c("food_group", "metabolie"))
 
-hmdb_id <-
-  hmdb_id %>%
-  purrr::map(function(x) {
-    if (nchar(x) == 9) {
-      x %>%
-        stringr::str_replace("HMDB", "HMDB00")
-    } else{
-      x
-    }
-  }) %>%
-  unlist()
 
-hmdb_id <-
-  hmdb_id[hmdb_id != ""]
+temp_cor_ir <-
+  predm_cor  %>% 
+  tibble::rownames_to_column(var = "food_group") %>%
+  tidyr::pivot_longer(cols = -food_group, names_to = "metabolie", values_to = "cor")
 
-kegg_id <-
-  kegg_id[kegg_id != ""] %>%
-  stringr::str_split("\\|") %>%
-  unlist() %>%
-  unique()
+temp_p_ir <-
+  predm_cor  %>% 
+  tibble::rownames_to_column(var = "food_group") %>%
+  tidyr::pivot_longer(cols = -food_group, names_to = "metabolie", values_to = "p")
 
-kegg_id <-
-  kegg_id[kegg_id != ""]
+temp_ir <-
+  temp_cor_ir  %>% 
+  dplyr::left_join(temp_p_ir, by = c("food_group", "metabolie"))
 
-###HMDB
-data("hmdb_pathway", package = "metpath")
-###Only remain the Metabolic;primary_pathway.
-pathway_class =
-  metpath::pathway_class(hmdb_pathway)
+dim(temp_is)
+dim(temp_ir)
 
-remain_idx = which(unlist(pathway_class) == "Metabolic;primary_pathway")
+###use histgram to show the distribution of the cor
+library(ggplot2)
+library(ggpubr)
+# temp_is  %>% 
+#   ggplot(aes(cor)) +
+#   geom_histogram(binwidth = 0.1) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-remain_idx
+###use the density plot to show the distribution of the cor
 
-hmdb_pathway =
-  hmdb_pathway[remain_idx]
+temp <-
+  rbind(
+    data.frame(temp_is, class = "IS"),
+    data.frame(temp_ir, class = "IR")
+  )
 
-# result_hmdb_ir =
-#   enrich_hmdb(query_id = hmdb_id,
-#               query_type = "compound",
-#               id_type = "HMDB",
-#               pathway_database = hmdb_pathway,
-#               only_primary_pathway = TRUE,
-#               p_cutoff = 0.05,
-#               p_adjust_method = "BH",
-#               threads = 3)
-# 
-# save(result_hmdb_ir, file = "result_hmdb_ir")
-load("result_hmdb_ir")
-
-write.csv(result_hmdb_ir@result, file = "result_hmdb_ir.csv", row.names = FALSE)
-
+###the density plot below use the color to fill the density plot
 plot <-
-  enrich_bar_plot(object = result_hmdb_ir,
-                  x_axis = "p_value",
-                  top = 10)
+  temp %>%
+  ggplot(aes(cor)) +
+  geom_density(aes(color = class)) +
+  theme_bw() +
+  scale_color_manual(values = ir_is_color) +
+  labs(x = "Correlation", y = "Density")
+
 plot
-ggsave(plot,
-       filename = "enrichment_result_hmdb_ir.pdf",
-       width = 7,
-       height = 7)
 
-###KEGG
-data("kegg_hsa_pathway", package = "metpath")
-###Only remain the Metabolic;primary_pathway.
-pathway_class =
-  metpath::pathway_class(kegg_hsa_pathway)
+ggsave(plot, filename = "cor_density_comparison.pdf", 
+       width = 8, height = 6)
 
-remain_idx =
-  pathway_class %>%
-  unlist() %>%
-  stringr::str_detect("Disease") %>%
-  `!`() %>%
-  which()
 
-remain_idx
 
-kegg_hsa_pathway =
-  kegg_hsa_pathway[remain_idx]
 
-# result_kegg_ir =
-#   enrich_kegg(query_id = kegg_id,
-#               query_type = "compound",
-#               id_type = "KEGG",
-#               pathway_database = kegg_hsa_pathway,
-#               p_cutoff = 0.05,
-#               p_adjust_method = "BH",
-#               threads = 3)
+
+
+# ###pathway enrichment for metabolites for IR and IS
+# library(metpath)
+# ####IR metabolites
+# sum(cor_data_IR_output$p_adjust < 0.05)
 # 
-# save(result_kegg_ir, file = "result_kegg_ir")
-load("result_kegg_ir")
-
-write.csv(result_kegg_ir@result, file = "result_kegg_ir.csv", row.names = FALSE)
-
-plot <-
-  enrich_bar_plot(object = result_kegg_ir,
-                  x_axis = "p_value",
-                  top = 10)
-plot
-ggsave(plot,
-       filename = "enrichment_result_kegg_ir.pdf",
-       width = 7,
-       height = 7)
-
-
-####IS metabolites
-sum(cor_data_IS_output$p_adjust < 0.05)
-
-idx <- which(cor_data_IS_output$p_adjust < 0.05)
-hmdb_id <- cor_data_IS_output$HMDB[idx]
-kegg_id <- cor_data_IS_output$KEGG[idx]
-
-hmdb_id <-
-  hmdb_id[hmdb_id != ""] %>%
-  stringr::str_split("\\|") %>%
-  unlist() %>%
-  unique()
-
-hmdb_id <-
-  hmdb_id[hmdb_id != ""]
-
-hmdb_id <-
-  hmdb_id %>%
-  purrr::map(function(x) {
-    if (nchar(x) == 9) {
-      x %>%
-        stringr::str_replace("HMDB", "HMDB00")
-    } else{
-      x
-    }
-  }) %>%
-  unlist()
-
-kegg_id <-
-  kegg_id[kegg_id != ""] %>%
-  stringr::str_split("\\|") %>%
-  unlist() %>%
-  unique()
-
-kegg_id <-
-  kegg_id[kegg_id != ""]
-
-###HMDB
-data("hmdb_pathway", package = "metpath")
-###Only remain the Metabolic;primary_pathway.
-pathway_class =
-  metpath::pathway_class(hmdb_pathway)
-
-remain_idx = which(unlist(pathway_class) == "Metabolic;primary_pathway")
-
-remain_idx
-
-hmdb_pathway =
-  hmdb_pathway[remain_idx]
-
-# result_hmdb_is =
-#   enrich_hmdb(query_id = hmdb_id,
-#               query_type = "compound",
-#               id_type = "HMDB",
-#               pathway_database = hmdb_pathway,
-#               only_primary_pathway = TRUE,
-#               p_cutoff = 0.05,
-#               p_adjust_method = "BH",
-#               threads = 3)
+# idx <- which(cor_data_IR_output$p_adjust < 0.05)
+# hmdb_id <- cor_data_IR_output$HMDB[idx]
+# kegg_id <- cor_data_IR_output$KEGG[idx]
 # 
-# save(result_hmdb_is, file = "result_hmdb_is")
-load("result_hmdb_is")
-
-
-write.csv(result_hmdb_is@result, file = "result_hmdb_is.csv", row.names = FALSE)
-
-plot <-
-  enrich_bar_plot(object = result_hmdb_is,
-                  x_axis = "p_value",
-                  top = 10)
-plot
-ggsave(plot,
-       filename = "enrichment_result_hmdb_is.pdf",
-       width = 7,
-       height = 7)
-
-
-###KEGG
-data("kegg_hsa_pathway", package = "metpath")
-###Only remain the Metabolic;primary_pathway.
-pathway_class =
-  metpath::pathway_class(kegg_hsa_pathway)
-
-remain_idx =
-  pathway_class %>%
-  unlist() %>%
-  stringr::str_detect("Disease") %>%
-  `!`() %>%
-  which()
-
-remain_idx
-
-kegg_hsa_pathway =
-  kegg_hsa_pathway[remain_idx]
-
-# result_kegg_is =
-#   enrich_kegg(query_id = kegg_id,
-#               query_type = "compound",
-#               id_type = "KEGG",
-#               pathway_database = kegg_hsa_pathway,
-#               p_cutoff = 0.05,
-#               p_adjust_method = "BH",
-#               threads = 3)
+# hmdb_id <-
+#   hmdb_id[hmdb_id != ""] %>%
+#   stringr::str_split("\\|") %>%
+#   unlist() %>%
+#   unique()
 # 
-# save(result_kegg_is, file = "result_kegg_is")
-load("result_kegg_is")
-
-write.csv(result_kegg_is@result, file = "result_kegg_is.csv", row.names = FALSE)
-
-plot <-
-  enrich_bar_plot(object = result_kegg_is,
-                  x_axis = "p_value",
-                  top = 10)
-plot
-ggsave(plot,
-       filename = "enrichment_result_kegg_is.pdf",
-       width = 7,
-       height = 7)
+# hmdb_id <-
+#   hmdb_id %>%
+#   purrr::map(function(x) {
+#     if (nchar(x) == 9) {
+#       x %>%
+#         stringr::str_replace("HMDB", "HMDB00")
+#     } else{
+#       x
+#     }
+#   }) %>%
+#   unlist()
+# 
+# hmdb_id <-
+#   hmdb_id[hmdb_id != ""]
+# 
+# kegg_id <-
+#   kegg_id[kegg_id != ""] %>%
+#   stringr::str_split("\\|") %>%
+#   unlist() %>%
+#   unique()
+# 
+# kegg_id <-
+#   kegg_id[kegg_id != ""]
+# 
+# ###HMDB
+# data("hmdb_pathway", package = "metpath")
+# ###Only remain the Metabolic;primary_pathway.
+# pathway_class =
+#   metpath::pathway_class(hmdb_pathway)
+# 
+# remain_idx = which(unlist(pathway_class) == "Metabolic;primary_pathway")
+# 
+# remain_idx
+# 
+# hmdb_pathway =
+#   hmdb_pathway[remain_idx]
+# 
+# # result_hmdb_ir =
+# #   enrich_hmdb(query_id = hmdb_id,
+# #               query_type = "compound",
+# #               id_type = "HMDB",
+# #               pathway_database = hmdb_pathway,
+# #               only_primary_pathway = TRUE,
+# #               p_cutoff = 0.05,
+# #               p_adjust_method = "BH",
+# #               threads = 3)
+# # 
+# # save(result_hmdb_ir, file = "result_hmdb_ir")
+# load("result_hmdb_ir")
+# 
+# write.csv(result_hmdb_ir@result, file = "result_hmdb_ir.csv", row.names = FALSE)
+# 
+# plot <-
+#   enrich_bar_plot(object = result_hmdb_ir,
+#                   x_axis = "p_value",
+#                   top = 10)
+# plot
+# ggsave(plot,
+#        filename = "enrichment_result_hmdb_ir.pdf",
+#        width = 7,
+#        height = 7)
+# 
+# ###KEGG
+# data("kegg_hsa_pathway", package = "metpath")
+# ###Only remain the Metabolic;primary_pathway.
+# pathway_class =
+#   metpath::pathway_class(kegg_hsa_pathway)
+# 
+# remain_idx =
+#   pathway_class %>%
+#   unlist() %>%
+#   stringr::str_detect("Disease") %>%
+#   `!`() %>%
+#   which()
+# 
+# remain_idx
+# 
+# kegg_hsa_pathway =
+#   kegg_hsa_pathway[remain_idx]
+# 
+# # result_kegg_ir =
+# #   enrich_kegg(query_id = kegg_id,
+# #               query_type = "compound",
+# #               id_type = "KEGG",
+# #               pathway_database = kegg_hsa_pathway,
+# #               p_cutoff = 0.05,
+# #               p_adjust_method = "BH",
+# #               threads = 3)
+# # 
+# # save(result_kegg_ir, file = "result_kegg_ir")
+# load("result_kegg_ir")
+# 
+# write.csv(result_kegg_ir@result, file = "result_kegg_ir.csv", row.names = FALSE)
+# 
+# plot <-
+#   enrich_bar_plot(object = result_kegg_ir,
+#                   x_axis = "p_value",
+#                   top = 10)
+# plot
+# ggsave(plot,
+#        filename = "enrichment_result_kegg_ir.pdf",
+#        width = 7,
+#        height = 7)
+# 
+# 
+# ####IS metabolites
+# sum(cor_data_IS_output$p_adjust < 0.05)
+# 
+# idx <- which(cor_data_IS_output$p_adjust < 0.05)
+# hmdb_id <- cor_data_IS_output$HMDB[idx]
+# kegg_id <- cor_data_IS_output$KEGG[idx]
+# 
+# hmdb_id <-
+#   hmdb_id[hmdb_id != ""] %>%
+#   stringr::str_split("\\|") %>%
+#   unlist() %>%
+#   unique()
+# 
+# hmdb_id <-
+#   hmdb_id[hmdb_id != ""]
+# 
+# hmdb_id <-
+#   hmdb_id %>%
+#   purrr::map(function(x) {
+#     if (nchar(x) == 9) {
+#       x %>%
+#         stringr::str_replace("HMDB", "HMDB00")
+#     } else{
+#       x
+#     }
+#   }) %>%
+#   unlist()
+# 
+# kegg_id <-
+#   kegg_id[kegg_id != ""] %>%
+#   stringr::str_split("\\|") %>%
+#   unlist() %>%
+#   unique()
+# 
+# kegg_id <-
+#   kegg_id[kegg_id != ""]
+# 
+# ###HMDB
+# data("hmdb_pathway", package = "metpath")
+# ###Only remain the Metabolic;primary_pathway.
+# pathway_class =
+#   metpath::pathway_class(hmdb_pathway)
+# 
+# remain_idx = which(unlist(pathway_class) == "Metabolic;primary_pathway")
+# 
+# remain_idx
+# 
+# hmdb_pathway =
+#   hmdb_pathway[remain_idx]
+# 
+# # result_hmdb_is =
+# #   enrich_hmdb(query_id = hmdb_id,
+# #               query_type = "compound",
+# #               id_type = "HMDB",
+# #               pathway_database = hmdb_pathway,
+# #               only_primary_pathway = TRUE,
+# #               p_cutoff = 0.05,
+# #               p_adjust_method = "BH",
+# #               threads = 3)
+# # 
+# # save(result_hmdb_is, file = "result_hmdb_is")
+# load("result_hmdb_is")
+# 
+# 
+# write.csv(result_hmdb_is@result, file = "result_hmdb_is.csv", row.names = FALSE)
+# 
+# plot <-
+#   enrich_bar_plot(object = result_hmdb_is,
+#                   x_axis = "p_value",
+#                   top = 10)
+# plot
+# ggsave(plot,
+#        filename = "enrichment_result_hmdb_is.pdf",
+#        width = 7,
+#        height = 7)
+# 
+# 
+# ###KEGG
+# data("kegg_hsa_pathway", package = "metpath")
+# ###Only remain the Metabolic;primary_pathway.
+# pathway_class =
+#   metpath::pathway_class(kegg_hsa_pathway)
+# 
+# remain_idx =
+#   pathway_class %>%
+#   unlist() %>%
+#   stringr::str_detect("Disease") %>%
+#   `!`() %>%
+#   which()
+# 
+# remain_idx
+# 
+# kegg_hsa_pathway =
+#   kegg_hsa_pathway[remain_idx]
+# 
+# # result_kegg_is =
+# #   enrich_kegg(query_id = kegg_id,
+# #               query_type = "compound",
+# #               id_type = "KEGG",
+# #               pathway_database = kegg_hsa_pathway,
+# #               p_cutoff = 0.05,
+# #               p_adjust_method = "BH",
+# #               threads = 3)
+# # 
+# # save(result_kegg_is, file = "result_kegg_is")
+# load("result_kegg_is")
+# 
+# write.csv(result_kegg_is@result, file = "result_kegg_is.csv", row.names = FALSE)
+# 
+# plot <-
+#   enrich_bar_plot(object = result_kegg_is,
+#                   x_axis = "p_value",
+#                   top = 10)
+# plot
+# ggsave(plot,
+#        filename = "enrichment_result_kegg_is.pdf",
+#        width = 7,
+#        height = 7)
 
